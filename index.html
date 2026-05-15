@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Canal restreint – Urgence</title>
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <style>
+    body {
+      background: #0b173b url('https://i.imgur.com/1pQvQqS.png') repeat;
+      font-family: Tahoma, Verdana, sans-serif;
+      color: #ffffff;
+    }
+    .window {
+      width: 800px;
+      margin: 30px auto;
+      border: 2px solid #0055aa;
+      background: #e0e8ff;
+      color: #000;
+      box-shadow: 0 0 10px #000;
+    }
+    .titlebar {
+      background: linear-gradient(#0b4fa8, #0b2f6a);
+      color: #fff;
+      padding: 6px 10px;
+      font-weight: bold;
+      font-size: 13px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .titlebar-buttons span {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      margin-left: 4px;
+      background: #c0c0c0;
+      text-align: center;
+      line-height: 16px;
+      font-size: 11px;
+      cursor: default;
+    }
+    .content {
+      padding: 10px;
+      display: flex;
+      gap: 10px;
+    }
+    .left, .right {
+      flex: 1;
+    }
+    .warning {
+      background: #ffcccc;
+      border: 1px solid #cc0000;
+      color: #660000;
+      padding: 8px;
+      font-weight: bold;
+      text-align: center;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+    }
+    .login-box {
+      background: #f0f4ff;
+      border: 1px solid #a0a0ff;
+      padding: 8px;
+      margin-bottom: 10px;
+      font-size: 12px;
+    }
+    .login-box select, .login-box input {
+      width: 100%;
+      margin-top: 4px;
+      margin-bottom: 6px;
+      font-size: 12px;
+    }
+    .login-box button {
+      width: 100%;
+      padding: 4px;
+      font-size: 12px;
+    }
+    .chat-window {
+      border: 1px solid #808080;
+      background: #ffffff;
+      height: 260px;
+      overflow-y: auto;
+      padding: 5px;
+      font-size: 12px;
+    }
+    .chat-input {
+      margin-top: 6px;
+      display: flex;
+      gap: 4px;
+    }
+    .chat-input input {
+      flex: 1;
+      font-size: 12px;
+      padding: 3px;
+    }
+    .chat-input button {
+      width: 80px;
+      font-size: 12px;
+    }
+    .msg-me {
+      color: #003399;
+      margin-bottom: 3px;
+    }
+    .msg-system {
+      color: #666666;
+      font-style: italic;
+      margin-bottom: 3px;
+    }
+    .map-box {
+      border: 1px solid #808080;
+      background: #ffffff;
+      height: 320px;
+    }
+    .map-box iframe {
+      width: 100%;
+      height: 100%;
+      border: 0;
+    }
+    .status-bar {
+      background: #d0d0ff;
+      padding: 4px 8px;
+      font-size: 11px;
+      border-top: 1px solid #808080;
+    }
+  </style>
+</head>
+<body>
+  <div class="window">
+    <div class="titlebar">
+      <span>MSN Mesh – Canal restreint</span>
+      <div class="titlebar-buttons">
+        <span>_</span><span>[]</span><span>X</span>
+      </div>
+    </div>
+    <div class="content">
+      <div class="left">
+        <div class="warning">
+          CANAL À USAGE RESTREINT – URGENCE OU PRIORITÉS SEULEMENT
+        </div>
+
+        <div class="login-box" id="loginBox">
+          <div><b>Connexion profil</b></div>
+          <label>Profil :</label>
+          <select id="profileSelect">
+            <option value="">-- choisir un profil --</option>
+            <option value="alpha">Alpha</option>
+            <option value="bravo">Bravo</option>
+            <option value="charlie">Charlie</option>
+            <option value="delta">Delta</option>
+          </select>
+          <label>Mot de passe :</label>
+          <input type="password" id="passwordInput" placeholder="Mot de passe">
+          <button onclick="login()">Se connecter</button>
+          <div id="loginStatus" style="margin-top:4px;color:#900;font-size:11px;"></div>
+        </div>
+
+        <div class="chat-window" id="chatWindow">
+          <div class="msg-system">[Système] Connectez-vous pour envoyer des messages.</div>
+        </div>
+        <div class="chat-input">
+          <input id="msgInput" type="text" placeholder="Tapez votre message..." disabled>
+          <button onclick="sendMessage()" id="sendBtn" disabled>Envoyer</button>
+        </div>
+      </div>
+
+      <div class="right">
+        <div class="map-box">
+          <!-- Carte OpenStreetMap centrée sur la France (tu pourras ajuster plus tard) -->
+          <iframe 
+            src="https://www.openstreetmap.org/export/embed.html?bbox=2.0,44.0,4.5,46.5&layer=mapnik">
+          </iframe>
+        </div>
+      </div>
+    </div>
+    <div class="status-bar" id="statusBar">
+      Profil : non connecté – MQTT : connexion en cours…
+    </div>
+  </div>
+
+  <script>
+    // Profils simples en dur (à adapter si tu veux)
+    const profiles = {
+      "alpha": "alpha123",
+      "bravo": "bravo123",
+      "charlie": "charlie123",
+      "delta": "delta123"
+    };
+
+    let currentProfile = null;
+
+    // Connexion MQTT (Option A : serveur public Meshtastic)
+    const client = mqtt.connect("wss://mqtt.meshtastic.org:443");
+
+    client.on('connect', function () {
+      document.getElementById('statusBar').textContent =
+        "Profil : non connecté – MQTT : connecté à mqtt.meshtastic.org";
+    });
+
+    client.on('error', function () {
+      document.getElementById('statusBar').textContent =
+        "Profil : non connecté – MQTT : erreur de connexion";
+    });
+
+    function addMessage(text, cssClass) {
+      const chat = document.getElementById('chatWindow');
+      const div = document.createElement('div');
+      div.className = cssClass;
+      div.textContent = text;
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function login() {
+      const profile = document.getElementById('profileSelect').value;
+      const pwd = document.getElementById('passwordInput').value;
+      const status = document.getElementById('loginStatus');
+
+      if (!profile) {
+        status.textContent = "Choisissez un profil.";
+        return;
+      }
+      if (!pwd) {
+        status.textContent = "Entrez un mot de passe.";
+        return;
+      }
+      if (profiles[profile] && profiles[profile] === pwd) {
+        currentProfile = profile;
+        status.style.color = "#060";
+        status.textContent = "Connexion réussie.";
+        document.getElementById('msgInput').disabled = false;
+        document.getElementById('sendBtn').disabled = false;
+        addMessage("[Système] Connecté en tant que " + profile, "msg-system");
+        document.getElementById('statusBar').textContent =
+          "Profil : " + profile + " – MQTT : connecté à mqtt.meshtastic.org";
+      } else {
+        status.style.color = "#900";
+        status.textContent = "Profil ou mot de passe incorrect.";
+      }
+    }
+
+    function sendMessage() {
+      if (!currentProfile) {
+        addMessage("[Système] Vous devez être connecté pour envoyer.", "msg-system");
+        return;
+      }
+      const input = document.getElementById('msgInput');
+      const text = input.value.trim();
+      if (!text) return;
+
+      // Affichage local
+      addMessage(currentProfile + " : " + text, "msg-me");
+
+      // Payload pour Meshtastic (texte simple)
+      const payload = JSON.stringify({ "text": text });
+
+      // TODO : adapte le topic à ton canal réel
+      // Exemple : msh/FR/moncanal/2/json
+      client.publish("msh/FR/tonchannel/2/json", payload);
+
+      input.value = "";
+    }
+  </script>
+</body>
+</html>
