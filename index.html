@@ -1,13 +1,12 @@
-```html
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
   <title>Canal restreint – Urgence</title>
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
-  <!-- Leaflet pour la carte évolutive -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
   <style>
     body {
       background: #0b173b url('https://i.imgur.com/1pQvQqS.png') repeat;
@@ -15,17 +14,23 @@
       color: #ffffff;
     }
 
-    /* Watermark diagonal en patois auvergnat */
-    body::before {
-      content: "Fò pas o dire — secret de bougnat";
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%) rotate(-30deg);
-      font-size: 64px;
-      color: rgba(255, 255, 255, 0.06);
+    /* -----------------------------------------
+       NOUVELLE ZONE WATERMARK SOUS LA CARTE
+       ----------------------------------------- */
+    #bougnatWatermark {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      width: 300px;
+      height: 120px;
       pointer-events: none;
-      z-index: 0;
+      transform: rotate(-28deg);
+      opacity: 0.12;
+      font-size: 32px;
+      font-weight: bold;
+      color: #ffffff;
+      text-shadow: 2px 2px 4px #000;
+      z-index: 5;
       white-space: nowrap;
     }
 
@@ -39,6 +44,7 @@
       box-shadow: 0 0 10px #000;
       z-index: 1;
     }
+
     .titlebar {
       background: linear-gradient(#0b4fa8, #0b2f6a);
       color: #fff;
@@ -49,6 +55,7 @@
       justify-content: space-between;
       align-items: center;
     }
+
     .titlebar-buttons span {
       display: inline-block;
       width: 16px;
@@ -60,11 +67,13 @@
       font-size: 11px;
       cursor: default;
     }
+
     .content {
       padding: 10px;
       display: flex;
       gap: 10px;
     }
+
     .left, .right {
       flex: 1;
     }
@@ -81,7 +90,6 @@
       font-size: 12px;
     }
 
-    /* Bandeau titre global (zetta) */
     #globalTitleBanner {
       display: none;
       background: #ffe0a0;
@@ -94,7 +102,6 @@
       font-size: 11px;
     }
 
-    /* Petites lignes aléatoires sous le bandeau */
     .disclaimers {
       background: #ffecec;
       border: 1px solid #e0a0a0;
@@ -102,9 +109,6 @@
       padding: 6px 8px;
       font-size: 10px;
       margin-bottom: 10px;
-    }
-    .disclaimers div {
-      margin-bottom: 2px;
     }
 
     .login-box {
@@ -114,17 +118,7 @@
       margin-bottom: 10px;
       font-size: 12px;
     }
-    .login-box select, .login-box input {
-      width: 100%;
-      margin-top: 4px;
-      margin-bottom: 6px;
-      font-size: 12px;
-    }
-    .login-box button {
-      width: 100%;
-      padding: 4px;
-      font-size: 12px;
-    }
+
     .chat-window {
       border: 1px solid #808080;
       background: #ffffff;
@@ -133,43 +127,25 @@
       padding: 5px;
       font-size: 12px;
     }
+
     .chat-input {
       margin-top: 6px;
       display: flex;
       gap: 4px;
     }
-    .chat-input input {
-      flex: 1;
-      font-size: 12px;
-      padding: 3px;
-    }
-    .chat-input button {
-      width: 80px;
-      font-size: 12px;
-    }
+
     .wizz-box {
       margin-top: 4px;
       text-align: right;
-    }
-    .wizz-box button {
-      font-size: 11px;
-      padding: 3px 8px;
-    }
-    .msg-me {
-      color: #003399;
-      margin-bottom: 3px;
-    }
-    .msg-system {
-      color: #666666;
-      font-style: italic;
-      margin-bottom: 3px;
     }
 
     .map-box {
       border: 1px solid #808080;
       background: #ffffff;
       height: 320px;
+      position: relative;
     }
+
     #map {
       width: 100%;
       height: 100%;
@@ -182,7 +158,6 @@
       border-top: 1px solid #808080;
     }
 
-    /* Outils zetta */
     #zettaTools {
       display: none;
       margin-top: 8px;
@@ -191,20 +166,7 @@
       border: 1px dashed #6688cc;
       font-size: 11px;
     }
-    #zettaTools textarea,
-    #zettaTools input {
-      width: 100%;
-      font-size: 11px;
-      margin-top: 3px;
-      margin-bottom: 4px;
-    }
-    #zettaTools button {
-      font-size: 11px;
-      padding: 3px 6px;
-      margin-right: 4px;
-    }
 
-    /* Effet Wizz (tremblement) */
     @keyframes wizz-shake {
       0% { transform: translate(0, 0); }
       20% { transform: translate(-4px, 2px); }
@@ -213,11 +175,13 @@
       80% { transform: translate(3px, -3px); }
       100% { transform: translate(0, 0); }
     }
+
     .wizz-shake {
       animation: wizz-shake 0.4s ease-in-out;
     }
   </style>
 </head>
+
 <body>
   <div class="window" id="mainWindow">
     <div class="titlebar">
@@ -226,19 +190,21 @@
         <span>_</span><span>[]</span><span>X</span>
       </div>
     </div>
+
     <div class="content">
       <div class="left">
+
         <div class="warning">
           ALERTE GÉNÉRALE – NIVEAU MAXIMAL ATTEINT<br>
           Canal restreint : si tu écris ici, c’est que ça chauffe vraiment.
         </div>
 
         <div id="globalTitleBanner"></div>
-
         <div class="disclaimers" id="disclaimersBox"></div>
 
-        <div class="login-box" id="loginBox">
-          <div><b>Connexion profil</b></div>
+        <div class="login-box">
+          <b>Connexion profil</b><br><br>
+
           <label>Profil :</label>
           <select id="profileSelect">
             <option value="">-- choisir un profil --</option>
@@ -246,12 +212,12 @@
             <option value="bravo">Bravo</option>
             <option value="charlie">Charlie</option>
             <option value="delta">Delta</option>
-            <!-- zetta caché -->
             <option value="zetta" style="display:none;">zetta</option>
           </select>
 
           <label>Mot de passe :</label>
-          <input type="password" id="passwordInput" placeholder="Mot de passe">
+          <input type="password" id="passwordInput">
+
           <button onclick="login()">Se connecter</button>
           <div id="loginStatus" style="margin-top:4px;color:#900;font-size:11px;"></div>
         </div>
@@ -259,9 +225,10 @@
         <div class="chat-window" id="chatWindow">
           <div class="msg-system">[Système] Connectez-vous pour envoyer des messages.</div>
         </div>
+
         <div class="chat-input">
-          <input id="msgInput" type="text" placeholder="Tapez votre message..." disabled>
-          <button onclick="sendMessage()" id="sendBtn" disabled>Envoyer</button>
+          <input id="msgInput" type="text" disabled>
+          <button id="sendBtn" onclick="sendMessage()" disabled>Envoyer</button>
         </div>
 
         <div class="wizz-box">
@@ -269,433 +236,279 @@
         </div>
 
         <div id="zettaTools">
-          <div><b>Outils maintenance (zetta)</b></div>
-          <label>Titre global (bannière) :</label>
-          <input type="text" id="globalTitleInput" placeholder="Message d’alerte global…">
-          <button onclick="applyGlobalTitle()">Appliquer le titre global</button>
-          <hr style="margin:6px 0;">
-          <label>Réponse admin dans le fil :</label>
-          <textarea id="zettaReplyInput" rows="3" placeholder="Message admin…"></textarea>
-          <button onclick="sendZettaReply()">Envoyer dans le fil</button>
+          <b>Outils maintenance (zetta)</b><br>
+          <label>Titre global :</label>
+          <input type="text" id="globalTitleInput">
+          <button onclick="applyGlobalTitle()">Appliquer</button>
+          <hr>
+          <label>Message admin :</label>
+          <textarea id="zettaReplyInput" rows="3"></textarea>
+          <button onclick="sendZettaReply()">Envoyer</button>
         </div>
+
       </div>
 
       <div class="right">
         <div class="map-box">
           <div id="map"></div>
+
+          <!-- NOUVELLE ZONE WATERMARK -->
+          <div id="bougnatWatermark">
+            Fò pas o dire — secret de bougnat
+          </div>
         </div>
       </div>
     </div>
+
     <div class="status-bar" id="statusBar">
       Profil : non connecté – MQTT : connexion en cours…
     </div>
   </div>
+<script>
+/* -----------------------------
+   Profils
+----------------------------- */
+const profiles = {
+  "alpha": "alpha123",
+  "bravo": "bravo123",
+  "charlie": "charlie123",
+  "delta": "delta123"
+};
 
-  <script>
-    // -----------------------------
-    // Profils (TODO: changer les mots de passe plus tard)
-    // -----------------------------
-    const profiles = {
-      "alpha": "alpha123",
-      "bravo": "bravo123",
-      "charlie": "charlie123",
-      "delta": "delta123"
-    };
+const ZETTA_PASSWORD = "zetta123";
+const ADMIN_PROFILES = ["alpha", "zetta"];
+const SUPER_ADMIN = "zetta";
 
-    // Super-admin zetta (caché)
-    // TODO: changer le mot de passe plus tard
-    const ZETTA_PASSWORD = "zetta123";
-    const ADMIN_PROFILES = ["alpha", "zetta"];
-    const SUPER_ADMIN = "zetta";
+let currentProfile = null;
+let loginTime = 0;
 
-    let currentProfile = null;
-    let loginTime = 0;
+/* -----------------------------
+   Disclaimers aléatoires
+----------------------------- */
+const disclaimerPool = [
+  "Cette communication peut être surveillée. Ne mentionnez surtout pas l’emplacement du magot.",
+  "Pour votre sécurité, évitez de parler du magot caché.",
+  "Toute référence au magot enterré entraînera une coupure automatique du canal.",
+  "Coût d’une communication hors réseau : payable en café.",
+  "Les surtaxes émotionnelles ne sont pas remboursées.",
+  "Toute réponse tardive peut entraîner une majoration en sarcasme.",
+  "Ce canal n’est pas responsable de vos décisions discutables.",
+  "Si vous lisez ceci, c’est que la situation est grave.",
+  "Aucune garantie de bon sens n’est fournie avec ce service.",
+  "Cette communication peut être analysée par une IA rancunière.",
+  "Toute tentative de brouillage sera interprétée comme un aveu de culpabilité.",
+  "Ce canal peut être intercepté par des moyens de guerre électronique.",
+  "Les paquets envoyés peuvent être disséqués par une IA.",
+  "Vos messages serviront peut-être d’exemple dans une présentation.",
+  "Toute phrase contenant “plan” déclenche une hausse de tension de l’IA.",
+  "Ce système utilise du MQTT et un peu de chance.",
+  "Si vous avez l’impression d’être surveillé, ce n’est pas qu’une impression.",
+  "Certains messages peuvent entraîner une IA. Si elle devient trop intelligente, c’est votre faute."
+];
 
-    // -----------------------------
-    // Mentions "débiles" aléatoires
-    // -----------------------------
-    const disclaimerPool = [
-      "Cette communication peut être surveillée. Ne mentionnez surtout pas l’emplacement du magot planqué. Surtout pas.",
-      "Pour votre sécurité, évitez de parler du magot caché. Pour la nôtre aussi.",
-      "Toute référence au magot enterré entraînera une coupure automatique du canal (ou pas).",
-      "Coût d’une communication hors réseau : payable en bitcoin, café ou services rendus.",
-      "Les surtaxes émotionnelles ne sont pas remboursées. Les frais de panique restent à votre charge.",
-      "Toute réponse tardive peut entraîner une majoration en sarcasme.",
-      "En utilisant ce canal, vous acceptez que le mesh ne soit pas responsable de vos décisions discutables.",
-      "Si vous lisez ceci, c’est que la situation est grave… ou que vous aimez lire les petites lignes.",
-      "Aucune garantie de bon sens n’est fournie avec ce service. Utilisation à vos risques et périls.",
-      "Cette communication peut être analysée par une IA. Si tu dis une connerie, elle s’en souviendra plus longtemps que toi.",
-      "Toute tentative de brouillage sera interprétée comme un aveu de culpabilité par l’algorithme. Ou comme un bug. On ne sait pas encore.",
-      "Ce canal est susceptible d’être intercepté par des moyens de guerre électronique. Mais honnêtement, ils ont sûrement mieux à faire.",
-      "Les paquets envoyés sur ce mesh peuvent être copiés, rejoués, disséqués et jugés par une IA légèrement rancunière.",
-      "En poursuivant cette communication, vous acceptez que vos messages servent un jour d’exemple dans une présentation “à ne pas faire en situation de crise”.",
-      "Toute phrase contenant les mots “plan”, “attaque” ou “magot” déclenche automatiquement une hausse de la tension artérielle de l’IA de surveillance.",
-      "Ce système utilise des techniques avancées de guerre électronique. Enfin… surtout du MQTT et un peu de chance.",
-      "Si vous avez l’impression d’être surveillé, rassurez-vous : ce n’est pas qu’une impression.",
-      "Certains messages peuvent être utilisés pour entraîner une IA. Si elle devient plus intelligente que nous, ce sera en partie de votre faute."
-    ];
+function pickRandomDisclaimers(count) {
+  const pool = [...disclaimerPool];
+  const result = [];
+  for (let i = 0; i < count; i++) {
+    const idx = Math.floor(Math.random() * pool.length);
+    result.push(pool.splice(idx, 1)[0]);
+  }
+  return result;
+}
 
-    function pickRandomDisclaimers(count) {
-      const poolCopy = [...disclaimerPool];
-      const result = [];
-      for (let i = 0; i < count && poolCopy.length > 0; i++) {
-        const idx = Math.floor(Math.random() * poolCopy.length);
-        result.push(poolCopy.splice(idx, 1)[0]);
-      }
-      return result;
-    }
+function renderDisclaimers() {
+  const box = document.getElementById('disclaimersBox');
+  box.innerHTML = "";
+  pickRandomDisclaimers(3).forEach(t => {
+    const d = document.createElement('div');
+    d.textContent = t;
+    box.appendChild(d);
+  });
+}
 
-    function renderDisclaimers() {
-      const box = document.getElementById('disclaimersBox');
-      box.innerHTML = "";
-      const selected = pickRandomDisclaimers(3);
-      selected.forEach(text => {
-        const div = document.createElement('div');
-        div.textContent = text;
-        box.appendChild(div);
-      });
-    }
+/* -----------------------------
+   MQTT Meshtastic
+----------------------------- */
+const MESH_TOPIC = "msh/0/json";
+const client = mqtt.connect("wss://mqtt.meshtastic.org:443");
 
-    // -----------------------------
-    // TOPIC MESH (TODO: changer plus tard)
-    // -----------------------------
-    const MESH_TOPIC = "msh/0/json";
+client.on('connect', () => {
+  document.getElementById('statusBar').textContent =
+    "Profil : non connecté – MQTT : connecté";
+  client.subscribe(MESH_TOPIC);
+});
 
-    // -----------------------------
-    // MQTT Meshtastic
-    // -----------------------------
-    const client = mqtt.connect("wss://mqtt.meshtastic.org:443");
-
-    client.on('connect', function () {
-      document.getElementById('statusBar').textContent =
-        "Profil : non connecté – MQTT : connecté à mqtt.meshtastic.org";
-      client.subscribe(MESH_TOPIC);
-    });
-
-    client.on('error', function () {
-      document.getElementById('statusBar').textContent =
-        "Profil : non connecté – MQTT : erreur de connexion";
-    });
-
-    client.on('message', function (topic, message) {
-      if (topic !== MESH_TOPIC) return;
-      try {
-        const data = JSON.parse(message.toString());
-        if (data.position && typeof data.position.latitude === "number" &&
-            typeof data.position.longitude === "number") {
-          const lat = data.position.latitude;
-          const lon = data.position.longitude;
-          updateCurrentPosition(lat, lon, "Position reçue via le réseau Mesh", 1);
-        }
-      } catch (e) {}
-    });
-
-    function addMessage(text, cssClass) {
-      const chat = document.getElementById('chatWindow');
-      const div = document.createElement('div');
-      div.className = cssClass;
-      div.textContent = text;
-      chat.appendChild(div);
-      chat.scrollTop = chat.scrollHeight;
-    }
-
-    // -----------------------------
-    // Telegram (TODO: configurer)
-    // -----------------------------
-    const TELEGRAM_BOT_TOKEN = "TON_BOT_TOKEN_ICI";
-    const TELEGRAM_CHAT_ID   = "TON_CHAT_ID_ICI";
-
-    function sendTelegramNotification(text) {
-      if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID ||
-          TELEGRAM_BOT_TOKEN.includes("TON_BOT") ||
-          TELEGRAM_CHAT_ID.includes("TON_CHAT")) {
-        return;
-      }
-      fetch("https://api.telegram.org/bot" + TELEGRAM_BOT_TOKEN + "/sendMessage", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text })
-      }).catch(() => {});
-    }
-
-    // -----------------------------
-    // Helpers rôles
-    // -----------------------------
-    function isAdmin() {
-      return ADMIN_PROFILES.includes(currentProfile);
-    }
-
-    function isSuperAdmin() {
-      return currentProfile === SUPER_ADMIN;
-    }
-
-    // -----------------------------
-    // Login (avec accès direct zetta par mot de passe)
-    // -----------------------------
-    function login() {
-      let profile = document.getElementById('profileSelect').value;
-      const pwd = document.getElementById('passwordInput').value;
-      const status = document.getElementById('loginStatus');
-
-      if (!pwd) {
-        status.textContent = "Entrez un mot de passe.";
-        return;
-      }
-
-      // Accès direct zetta par mot de passe
-      if (pwd === ZETTA_PASSWORD) {
-        profile = "zetta";
-      }
-
-      if (!profile) {
-        status.textContent = "Choisissez un profil (ou utilisez le mot de passe zetta).";
-        return;
-      }
-
-      let ok = false;
-
-      if (profile === "zetta") {
-        if (pwd === ZETTA_PASSWORD) ok = true;
-      } else if (profiles[profile] && profiles[profile] === pwd) {
-        ok = true;
-      }
-
-      if (ok) {
-        currentProfile = profile;
-        loginTime = Date.now();
-        status.style.color = "#060";
-        status.textContent = "Connexion réussie.";
-        document.getElementById('msgInput').disabled = false;
-        document.getElementById('sendBtn').disabled = false;
-        addMessage("[Système] Connecté en tant que " + profile, "msg-system");
-        document.getElementById('statusBar').textContent =
-          "Profil : " + profile + " – MQTT : connecté à mqtt.meshtastic.org";
-
-        // Wizz activé uniquement pour alpha et zetta
-        document.getElementById('wizzBtn').disabled = !isAdmin();
-
-        // Outils zetta visibles uniquement pour super-admin
-        document.getElementById('zettaTools').style.display = isSuperAdmin() ? "block" : "none";
-
-        sendTelegramNotification("Connexion au canal restreint par le profil : " + profile);
-
-        requestBrowserPositionOnce();
-      } else {
-        status.style.color = "#900";
-        status.textContent = "Profil ou mot de passe incorrect.";
-      }
-    }
-
-    // -----------------------------
-    // Envoi de message
-    // -----------------------------
-    function sendMessage() {
-      if (!currentProfile) {
-        addMessage("[Système] Vous devez être connecté pour envoyer.", "msg-system");
-        return;
-      }
-      const input = document.getElementById('msgInput');
-      const text = input.value.trim();
-      if (!text) return;
-
-      addMessage(currentProfile + " : " + text, "msg-me");
-
-      const payload = JSON.stringify({ "text": text });
-      client.publish(MESH_TOPIC, payload);
-
-      sendTelegramNotification("[" + currentProfile + "] " + text);
-
-      input.value = "";
-    }
-
-    // -----------------------------
-    // Wizz (alpha + zetta)
-    // -----------------------------
-    const WIZZ_LIMIT_FIRST_MINUTE = 5;
-    const WIZZ_LIMIT_PER_MINUTE = 3;
-
-    let wizzCount = 0;
-    let wizzWindowStart = 0;
-
-    function canSendWizz() {
-      const now = Date.now();
-      if (!wizzWindowStart) {
-        wizzWindowStart = now;
-        wizzCount = 0;
-      }
-      const elapsedSinceLogin = now - loginTime;
-      const elapsedWindow = now - wizzWindowStart;
-
-      let limit;
-      if (elapsedSinceLogin < 60000) {
-        limit = WIZZ_LIMIT_FIRST_MINUTE;
-      } else {
-        if (elapsedWindow > 60000) {
-          wizzWindowStart = now;
-          wizzCount = 0;
-        }
-        limit = WIZZ_LIMIT_PER_MINUTE;
-      }
-      return wizzCount < limit;
-    }
-
-    function sendWizz() {
-      if (!currentProfile || !isAdmin()) return;
-
-      if (!canSendWizz()) {
-        addMessage("[Système] Wizz limité, attends un peu avant de recommencer.", "msg-system");
-        return;
-      }
-
-      wizzCount++;
-
-      addMessage("[WIZZ] " + currentProfile + " a envoyé un wizz !", "msg-system");
-
-      const win = document.getElementById('mainWindow');
-      win.classList.add('wizz-shake');
-      setTimeout(() => win.classList.remove('wizz-shake'), 450);
-
-      sendTelegramNotification("[WIZZ] " + currentProfile + " a envoyé un wizz sur le canal restreint.");
-
-      const payload = JSON.stringify({ "text": "[WIZZ] " + currentProfile });
-      client.publish(MESH_TOPIC, payload);
-    }
-
-    // -----------------------------
-    // Outils super-admin (zetta)
-    // -----------------------------
-    function applyGlobalTitle() {
-      if (!isSuperAdmin()) return;
-      const txt = document.getElementById('globalTitleInput').value.trim();
-      const banner = document.getElementById('globalTitleBanner');
-      if (txt) {
-        banner.textContent = txt;
-        banner.style.display = "block";
-      } else {
-        banner.textContent = "";
-        banner.style.display = "none";
-      }
-    }
-
-    function sendZettaReply() {
-      if (!isSuperAdmin()) return;
-      const txt = document.getElementById('zettaReplyInput').value.trim();
-      if (!txt) return;
-      addMessage("[ADMIN zetta] " + txt, "msg-system");
-
-      const payload = JSON.stringify({ "text": "[ADMIN zetta] " + txt });
-      client.publish(MESH_TOPIC, payload);
-      sendTelegramNotification("[ADMIN zetta] " + txt);
-
-      document.getElementById('zettaReplyInput').value = "";
-    }
-
-    // -----------------------------
-    // Carte Leaflet + historique 48h
-    // -----------------------------
-    let map;
-    let currentMarker = null;
-    let currentSourcePriority = Infinity; // 1 = mesh, 2 = GPS, 3 = box
-    let historyPositions = [];
-    let historyPolyline = null;
-
-    function initMap() {
-      map = L.map('map').setView([45.5, 3.1], 7);
-
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '&copy; OpenStreetMap'
-      }).addTo(map);
-    }
-
-    function pruneHistory() {
-      const now = Date.now();
-      const cutoff = now - 48 * 60 * 60 * 1000;
-      historyPositions = historyPositions.filter(p => p.time >= cutoff);
-    }
-
-    function redrawHistoryPolyline() {
-      if (!map) return;
-      if (historyPolyline) {
-        map.removeLayer(historyPolyline);
-        historyPolyline = null;
-      }
-      if (!isAdmin()) return;
-
-      if (historyPositions.length > 1) {
-        const latlngs = historyPositions.map(p => [p.lat, p.lon]);
-        historyPolyline = L.polyline(latlngs, { color: 'red', weight: 3, opacity: 0.7 });
-        historyPolyline.addTo(map);
-      }
-    }
-
-    function addHistoryPoint(lat, lon) {
-      const now = Date.now();
-      historyPositions.push({ lat, lon, time: now });
-      pruneHistory();
-      redrawHistoryPolyline();
-    }
-
-    function updateCurrentPosition(lat, lon, sourceLabel, priority) {
-      if (!map) return;
-      if (priority >= currentSourcePriority) {
-        return;
-      }
-      currentSourcePriority = priority;
-
-      if (currentMarker) {
-        map.removeLayer(currentMarker);
-        currentMarker = null;
-      }
-
-      currentMarker = L.marker([lat, lon]).addTo(map).bindPopup(sourceLabel);
-      currentMarker.openPopup();
-      map.setView([lat, lon], 12);
-
-      if (isAdmin()) {
-        addHistoryPoint(lat, lon);
-      }
-    }
-
-    // -----------------------------
-    // Position navigateur (GPS / réseau)
-    // -----------------------------
-    let browserPositionRequested = false;
-
-    function requestBrowserPositionOnce() {
-      if (browserPositionRequested) return;
-      browserPositionRequested = true;
-
-      if (!navigator.geolocation) return;
-
-      navigator.geolocation.getCurrentPosition(
-        pos => {
-          const lat = pos.coords.latitude;
-          const lon = pos.coords.longitude;
-          const acc = pos.coords.accuracy || 0;
-
-          if (acc > 1000) {
-            updateCurrentPosition(lat, lon, "Pas d’appareil connecté. Position estimée via la box 4G", 3);
-          } else {
-            updateCurrentPosition(lat, lon, "Position GPS du téléphone", 2);
-          }
-        },
-        err => {},
-        {
-          enableHighAccuracy: true,
-          timeout: 5000
-        }
+client.on('message', (topic, msg) => {
+  if (topic !== MESH_TOPIC) return;
+  try {
+    const data = JSON.parse(msg.toString());
+    if (data.position) {
+      updateCurrentPosition(
+        data.position.latitude,
+        data.position.longitude,
+        "Position reçue via le réseau Mesh",
+        1
       );
     }
+  } catch {}
+});
 
-    // -----------------------------
-    // Init
-    // -----------------------------
-    window.addEventListener('load', () => {
-      renderDisclaimers();
-      initMap();
-    });
-  </script>
-</body>
-</html>
-```
+/* -----------------------------
+   Telegram (à configurer)
+----------------------------- */
+const TELEGRAM_BOT_TOKEN = "TON_BOT_TOKEN_ICI";
+const TELEGRAM_CHAT_ID   = "TON_CHAT_ID_ICI";
+
+function sendTelegramNotification(text) {
+  if (TELEGRAM_BOT_TOKEN.includes("TON") || TELEGRAM_CHAT_ID.includes("TON")) return;
+  fetch("https://api.telegram.org/bot" + TELEGRAM_BOT_TOKEN + "/sendMessage", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text })
+  });
+}
+
+/* -----------------------------
+   Login
+----------------------------- */
+function isAdmin() { return ADMIN_PROFILES.includes(currentProfile); }
+function isSuperAdmin() { return currentProfile === SUPER_ADMIN; }
+
+function login() {
+  let profile = document.getElementById('profileSelect').value;
+  const pwd = document.getElementById('passwordInput').value;
+  const status = document.getElementById('loginStatus');
+
+  if (!pwd) {
+    status.textContent = "Entrez un mot de passe.";
+    return;
+  }
+
+  // Accès direct zetta
+  if (pwd === ZETTA_PASSWORD) {
+    profile = "zetta";
+  }
+
+  if (!profile) {
+    status.textContent = "Choisissez un profil (ou utilisez le mot de passe zetta).";
+    return;
+  }
+
+  let ok = false;
+
+  if (profile === "zetta") {
+    ok = (pwd === ZETTA_PASSWORD);
+  } else {
+    ok = (profiles[profile] === pwd);
+  }
+
+  if (!ok) {
+    status.textContent = "Mot de passe incorrect.";
+    return;
+  }
+
+  currentProfile = profile;
+  loginTime = Date.now();
+  status.style.color = "#060";
+  status.textContent = "Connexion réussie.";
+
+  document.getElementById('msgInput').disabled = false;
+  document.getElementById('sendBtn').disabled = false;
+  document.getElementById('wizzBtn').disabled = !isAdmin();
+  document.getElementById('zettaTools').style.display = isSuperAdmin() ? "block" : "none";
+
+  addMessage("[Système] Connecté en tant que " + profile, "msg-system");
+  sendTelegramNotification("Connexion : " + profile);
+
+  requestBrowserPositionOnce();
+}
+
+/* -----------------------------
+   Chat
+----------------------------- */
+function addMessage(text, css) {
+  const chat = document.getElementById('chatWindow');
+  const d = document.createElement('div');
+  d.className = css;
+  d.textContent = text;
+  chat.appendChild(d);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function sendMessage() {
+  if (!currentProfile) return;
+  const input = document.getElementById('msgInput');
+  const text = input.value.trim();
+  if (!text) return;
+
+  addMessage(currentProfile + " : " + text, "msg-me");
+  client.publish(MESH_TOPIC, JSON.stringify({ text }));
+  sendTelegramNotification("[" + currentProfile + "] " + text);
+
+  input.value = "";
+}
+
+/* -----------------------------
+   Wizz
+----------------------------- */
+const WIZZ_LIMIT_FIRST_MINUTE = 5;
+const WIZZ_LIMIT_PER_MINUTE = 3;
+
+let wizzCount = 0;
+let wizzWindowStart = 0;
+
+function canSendWizz() {
+  const now = Date.now();
+  if (!wizzWindowStart) {
+    wizzWindowStart = now;
+    wizzCount = 0;
+  }
+  const elapsedLogin = now - loginTime;
+  const elapsedWindow = now - wizzWindowStart;
+
+  let limit = (elapsedLogin < 60000) ? WIZZ_LIMIT_FIRST_MINUTE : WIZZ_LIMIT_PER_MINUTE;
+
+  if (elapsedWindow > 60000) {
+    wizzWindowStart = now;
+    wizzCount = 0;
+  }
+
+  return wizzCount < limit;
+}
+
+function sendWizz() {
+  if (!isAdmin()) return;
+
+  if (!canSendWizz()) {
+    addMessage("[Système] Wizz limité, attends un peu.", "msg-system");
+    return;
+  }
+
+  wizzCount++;
+
+  addMessage("[WIZZ] " + currentProfile + " a envoyé un wizz !", "msg-system");
+
+  const win = document.getElementById('mainWindow');
+  win.classList.add('wizz-shake');
+  setTimeout(() => win.classList.remove('wizz-shake'), 450);
+
+  sendTelegramNotification("[WIZZ] " + currentProfile);
+
+  client.publish(MESH_TOPIC, JSON.stringify({ text: "[WIZZ] " + currentProfile }));
+}
+
+/* -----------------------------
+   Outils zetta
+----------------------------- */
+function applyGlobalTitle() {
+  if (!isSuperAdmin()) return;
+  const txt = document.getElementById('globalTitleInput').value.trim();
+  const banner = document.getElementById('globalTitleBanner');
+  banner.textContent = txt;
+  banner.style.display = txt ? "block" : "none";
+}
+
+function sendZettaReply() {
+  if (!isSuperAdmin()) return;
+  const txt = document.getElementById('zettaReplyInput').value.trim();
+  if (!
