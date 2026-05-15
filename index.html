@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html>
 <head>
@@ -80,6 +81,19 @@
       font-size: 12px;
     }
 
+    /* Bandeau titre global (admin) */
+    #globalTitleBanner {
+      display: none;
+      background: #ffe0a0;
+      border: 1px solid #cc8800;
+      color: #663300;
+      padding: 6px;
+      font-weight: bold;
+      text-align: center;
+      margin-bottom: 4px;
+      font-size: 11px;
+    }
+
     /* Bloc sous le bandeau : petites lignes aléatoires */
     .disclaimers {
       background: #ffecec;
@@ -133,6 +147,14 @@
       width: 80px;
       font-size: 12px;
     }
+    .wizz-box {
+      margin-top: 4px;
+      text-align: right;
+    }
+    .wizz-box button {
+      font-size: 11px;
+      padding: 3px 8px;
+    }
     .msg-me {
       color: #003399;
       margin-bottom: 3px;
@@ -159,10 +181,45 @@
       font-size: 11px;
       border-top: 1px solid #808080;
     }
+
+    /* Outils zetta */
+    #zettaTools {
+      display: none;
+      margin-top: 8px;
+      padding: 6px;
+      background: #eef5ff;
+      border: 1px dashed #6688cc;
+      font-size: 11px;
+    }
+    #zettaTools textarea,
+    #zettaTools input {
+      width: 100%;
+      font-size: 11px;
+      margin-top: 3px;
+      margin-bottom: 4px;
+    }
+    #zettaTools button {
+      font-size: 11px;
+      padding: 3px 6px;
+      margin-right: 4px;
+    }
+
+    /* Effet Wizz (tremblement) */
+    @keyframes wizz-shake {
+      0% { transform: translate(0, 0); }
+      20% { transform: translate(-4px, 2px); }
+      40% { transform: translate(4px, -2px); }
+      60% { transform: translate(-3px, 3px); }
+      80% { transform: translate(3px, -3px); }
+      100% { transform: translate(0, 0); }
+    }
+    .wizz-shake {
+      animation: wizz-shake 0.4s ease-in-out;
+    }
   </style>
 </head>
 <body>
-  <div class="window">
+  <div class="window" id="mainWindow">
     <div class="titlebar">
       <span>MSN Mesh – Canal restreint</span>
       <div class="titlebar-buttons">
@@ -176,6 +233,9 @@
           ALERTE GÉNÉRALE – NIVEAU MAXIMAL ATTEINT<br>
           Canal restreint : si tu écris ici, c’est que ça chauffe vraiment.
         </div>
+
+        <!-- Message titre global (zetta) -->
+        <div id="globalTitleBanner"></div>
 
         <!-- Petites lignes aléatoires sous le bandeau -->
         <div class="disclaimers" id="disclaimersBox">
@@ -191,6 +251,8 @@
             <option value="bravo">Bravo</option>
             <option value="charlie">Charlie</option>
             <option value="delta">Delta</option>
+            <!-- Profil zetta caché dans la liste (maintenance) -->
+            <option value="zetta" style="display:none;">zetta</option>
           </select>
           <label>Mot de passe :</label>
           <input type="password" id="passwordInput" placeholder="Mot de passe">
@@ -204,6 +266,21 @@
         <div class="chat-input">
           <input id="msgInput" type="text" placeholder="Tapez votre message..." disabled>
           <button onclick="sendMessage()" id="sendBtn" disabled>Envoyer</button>
+        </div>
+        <div class="wizz-box">
+          <button id="wizzBtn" onclick="sendWizz()" disabled>Wizz</button>
+        </div>
+
+        <!-- Outils super-admin (zetta) -->
+        <div id="zettaTools">
+          <div><b>Outils maintenance (zetta)</b></div>
+          <label>Titre global (bannière) :</label>
+          <input type="text" id="globalTitleInput" placeholder="Message d’alerte global…">
+          <button onclick="applyGlobalTitle()">Appliquer le titre global</button>
+          <hr style="margin:6px 0;">
+          <label>Réponse admin dans le fil :</label>
+          <textarea id="zettaReplyInput" rows="3" placeholder="Message admin…"></textarea>
+          <button onclick="sendZettaReply()">Envoyer dans le fil</button>
         </div>
       </div>
 
@@ -221,6 +298,7 @@
   <script>
     // -----------------------------
     // Profils simples en dur
+    // TODO: changer les mots de passe plus tard
     // -----------------------------
     const profiles = {
       "alpha": "alpha123",
@@ -229,7 +307,15 @@
       "delta": "delta123"
     };
 
+    // Profil super-admin (zetta)
+    // TODO: changer le mot de passe plus tard
+    const ZETTA_PASSWORD = "zetta123";
+
+    const ADMIN_PROFILES = ["alpha", "zetta"];
+    const SUPER_ADMIN = "zetta";
+
     let currentProfile = null;
+    let loginTime = 0;
 
     // -----------------------------
     // Pool de phrases "mentions légales débiles"
@@ -281,6 +367,12 @@
     }
 
     // -----------------------------
+    // TOPIC MESH (à changer plus tard)
+    // Topic par défaut "d'usine" : msh/0/json
+    // -----------------------------
+    const MESH_TOPIC = "msh/0/json";
+
+    // -----------------------------
     // Connexion MQTT
     // -----------------------------
     const client = mqtt.connect("wss://mqtt.meshtastic.org:443");
@@ -288,11 +380,28 @@
     client.on('connect', function () {
       document.getElementById('statusBar').textContent =
         "Profil : non connecté – MQTT : connecté à mqtt.meshtastic.org";
+      // Abonnement au topic mesh
+      client.subscribe(MESH_TOPIC);
     });
 
     client.on('error', function () {
       document.getElementById('statusBar').textContent =
         "Profil : non connecté – MQTT : erreur de connexion";
+    });
+
+    client.on('message', function (topic, message) {
+      if (topic !== MESH_TOPIC) return;
+      try {
+        const data = JSON.parse(message.toString());
+        // Position Meshtastic
+        if (data.position && typeof data.position.latitude === "number" && typeof data.position.longitude === "number") {
+          const lat = data.position.latitude;
+          const lon = data.position.longitude;
+          updateCurrentPosition(lat, lon, "Position reçue via le réseau Mesh", 1);
+        }
+      } catch (e) {
+        // ignore
+      }
     });
 
     function addMessage(text, cssClass) {
@@ -306,6 +415,7 @@
 
     // -----------------------------
     // Telegram – à configurer
+    // TODO: renseigner BOT_TOKEN et CHAT_ID plus tard
     // -----------------------------
     const TELEGRAM_BOT_TOKEN = "TON_BOT_TOKEN_ICI";
     const TELEGRAM_CHAT_ID   = "TON_CHAT_ID_ICI";
@@ -328,6 +438,17 @@
     }
 
     // -----------------------------
+    // Helpers rôles
+    // -----------------------------
+    function isAdmin() {
+      return ADMIN_PROFILES.includes(currentProfile);
+    }
+
+    function isSuperAdmin() {
+      return currentProfile === SUPER_ADMIN;
+    }
+
+    // -----------------------------
     // Login
     // -----------------------------
     function login() {
@@ -343,8 +464,19 @@
         status.textContent = "Entrez un mot de passe.";
         return;
       }
-      if (profiles[profile] && profiles[profile] === pwd) {
+
+      let ok = false;
+
+      if (profile === "zetta") {
+        // Super-admin
+        if (pwd === ZETTA_PASSWORD) ok = true;
+      } else if (profiles[profile] && profiles[profile] === pwd) {
+        ok = true;
+      }
+
+      if (ok) {
         currentProfile = profile;
+        loginTime = Date.now();
         status.style.color = "#060";
         status.textContent = "Connexion réussie.";
         document.getElementById('msgInput').disabled = false;
@@ -353,10 +485,17 @@
         document.getElementById('statusBar').textContent =
           "Profil : " + profile + " – MQTT : connecté à mqtt.meshtastic.org";
 
+        // Wizz activé uniquement pour alpha et zetta
+        document.getElementById('wizzBtn').disabled = !isAdmin();
+
+        // Outils zetta visibles uniquement pour super-admin
+        document.getElementById('zettaTools').style.display = isSuperAdmin() ? "block" : "none";
+
         // Exemple : notif Telegram à la connexion
         sendTelegramNotification("Connexion au canal restreint par le profil : " + profile);
 
-        // Plus tard : ici on pourra afficher ton marker + trajet 48h sur la carte
+        // Demande de position navigateur (GPS / réseau)
+        requestBrowserPositionOnce();
       } else {
         status.style.color = "#900";
         status.textContent = "Profil ou mot de passe incorrect.";
@@ -381,8 +520,8 @@
       // Payload pour Meshtastic (texte simple)
       const payload = JSON.stringify({ "text": text });
 
-      // TODO : adapte le topic à ton canal réel
-      client.publish("msh/FR/tonchannel/2/json", payload);
+      // Publication sur le topic mesh actuel
+      client.publish(MESH_TOPIC, payload);
 
       // Exemple : notif Telegram à chaque message
       sendTelegramNotification("[" + currentProfile + "] " + text);
@@ -391,9 +530,103 @@
     }
 
     // -----------------------------
-    // Carte Leaflet (base)
+    // Wizz (alpha + zetta)
+    // -----------------------------
+    // TODO: ajuster les limites plus tard si besoin
+    const WIZZ_LIMIT_FIRST_MINUTE = 5;
+    const WIZZ_LIMIT_PER_MINUTE = 3;
+
+    let wizzCount = 0;
+    let wizzWindowStart = 0;
+
+    function canSendWizz() {
+      const now = Date.now();
+      if (!wizzWindowStart) {
+        wizzWindowStart = now;
+        wizzCount = 0;
+      }
+      const elapsedSinceLogin = now - loginTime;
+      const elapsedWindow = now - wizzWindowStart;
+
+      let limit;
+      if (elapsedSinceLogin < 60000) {
+        // Première minute après connexion
+        limit = WIZZ_LIMIT_FIRST_MINUTE;
+      } else {
+        // Ensuite : fenêtre glissante de 60s
+        if (elapsedWindow > 60000) {
+          wizzWindowStart = now;
+          wizzCount = 0;
+        }
+        limit = WIZZ_LIMIT_PER_MINUTE;
+      }
+      return wizzCount < limit;
+    }
+
+    function sendWizz() {
+      if (!currentProfile || !isAdmin()) return;
+
+      if (!canSendWizz()) {
+        addMessage("[Système] Wizz limité, attends un peu avant de recommencer.", "msg-system");
+        return;
+      }
+
+      wizzCount++;
+
+      // Message local
+      addMessage("[WIZZ] " + currentProfile + " a envoyé un wizz !", "msg-system");
+
+      // Effet visuel
+      const win = document.getElementById('mainWindow');
+      win.classList.add('wizz-shake');
+      setTimeout(() => win.classList.remove('wizz-shake'), 450);
+
+      // Ping Telegram
+      sendTelegramNotification("[WIZZ] " + currentProfile + " a envoyé un wizz sur le canal restreint.");
+
+      // Ping sur le mesh
+      const payload = JSON.stringify({ "text": "[WIZZ] " + currentProfile });
+      client.publish(MESH_TOPIC, payload);
+    }
+
+    // -----------------------------
+    // Outils super-admin (zetta)
+    // -----------------------------
+    function applyGlobalTitle() {
+      if (!isSuperAdmin()) return;
+      const txt = document.getElementById('globalTitleInput').value.trim();
+      const banner = document.getElementById('globalTitleBanner');
+      if (txt) {
+        banner.textContent = txt;
+        banner.style.display = "block";
+      } else {
+        banner.textContent = "";
+        banner.style.display = "none";
+      }
+    }
+
+    function sendZettaReply() {
+      if (!isSuperAdmin()) return;
+      const txt = document.getElementById('zettaReplyInput').value.trim();
+      if (!txt) return;
+      addMessage("[ADMIN zetta] " + txt, "msg-system");
+
+      // Relais éventuel vers mesh et Telegram
+      const payload = JSON.stringify({ "text": "[ADMIN zetta] " + txt });
+      client.publish(MESH_TOPIC, payload);
+      sendTelegramNotification("[ADMIN zetta] " + txt);
+
+      document.getElementById('zettaReplyInput').value = "";
+    }
+
+    // -----------------------------
+    // Carte Leaflet (base) + tracking 48h
     // -----------------------------
     let map;
+    let currentMarker = null;
+    let currentSourcePriority = Infinity; // 1 = mesh, 2 = GPS, 3 = box
+    let historyPositions = [];
+    let historyPolyline = null;
 
     function initMap() {
       map = L.map('map').setView([45.5, 3.1], 7); // centre approximatif Auvergne
@@ -402,12 +635,92 @@
         maxZoom: 19,
         attribution: '&copy; OpenStreetMap'
       }).addTo(map);
+    }
 
-      // Plus tard : on ajoutera ici
-      // - ton icône skate / canne à pêche
-      // - l’icône 3008
-      // - le tracé des 48 dernières heures
-      // - visibles seulement après login
+    function pruneHistory() {
+      const now = Date.now();
+      const cutoff = now - 48 * 60 * 60 * 1000; // 48h
+      historyPositions = historyPositions.filter(p => p.time >= cutoff);
+    }
+
+    function redrawHistoryPolyline() {
+      if (!map) return;
+      if (historyPolyline) {
+        map.removeLayer(historyPolyline);
+        historyPolyline = null;
+      }
+      if (!isAdmin()) return; // historique visible uniquement pour alpha + zetta
+
+      if (historyPositions.length > 1) {
+        const latlngs = historyPositions.map(p => [p.lat, p.lon]);
+        historyPolyline = L.polyline(latlngs, { color: 'red', weight: 3, opacity: 0.7 });
+        historyPolyline.addTo(map);
+      }
+    }
+
+    function addHistoryPoint(lat, lon) {
+      const now = Date.now();
+      historyPositions.push({ lat, lon, time: now });
+      pruneHistory();
+      redrawHistoryPolyline();
+    }
+
+    function updateCurrentPosition(lat, lon, sourceLabel, priority) {
+      if (!map) return;
+      if (priority >= currentSourcePriority) {
+        // On a déjà une source plus prioritaire
+        return;
+      }
+      currentSourcePriority = priority;
+
+      if (currentMarker) {
+        map.removeLayer(currentMarker);
+        currentMarker = null;
+      }
+
+      currentMarker = L.marker([lat, lon]).addTo(map).bindPopup(sourceLabel);
+      currentMarker.openPopup();
+      map.setView([lat, lon], 12);
+
+      if (isAdmin()) {
+        addHistoryPoint(lat, lon);
+      }
+    }
+
+    // -----------------------------
+    // Position navigateur (GPS / réseau)
+    // -----------------------------
+    let browserPositionRequested = false;
+
+    function requestBrowserPositionOnce() {
+      if (browserPositionRequested) return;
+      browserPositionRequested = true;
+
+      if (!navigator.geolocation) {
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          const lat = pos.coords.latitude;
+          const lon = pos.coords.longitude;
+          const acc = pos.coords.accuracy || 0;
+
+          // Heuristique simple : si précision très mauvaise, on considère que c’est la box / réseau
+          if (acc > 1000) {
+            updateCurrentPosition(lat, lon, "Pas d’appareil connecté. Position estimée via la box 4G", 3);
+          } else {
+            updateCurrentPosition(lat, lon, "Position GPS du téléphone", 2);
+          }
+        },
+        err => {
+          // Pas de GPS / pas de permission : on ne fait rien
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 5000
+        }
+      );
     }
 
     // -----------------------------
@@ -420,3 +733,4 @@
   </script>
 </body>
 </html>
+```
