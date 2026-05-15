@@ -4,19 +4,39 @@
   <meta charset="UTF-8">
   <title>Canal restreint – Urgence</title>
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <!-- Leaflet pour la carte évolutive -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
     body {
       background: #0b173b url('https://i.imgur.com/1pQvQqS.png') repeat;
       font-family: Tahoma, Verdana, sans-serif;
       color: #ffffff;
     }
+
+    /* Watermark diagonal "ALERTE GÉNÉRALE" */
+    body::before {
+      content: "ALERTE GÉNÉRALE";
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(-30deg);
+      font-size: 72px;
+      color: rgba(255, 255, 255, 0.06);
+      pointer-events: none;
+      z-index: 0;
+      white-space: nowrap;
+    }
+
     .window {
+      position: relative;
       width: 800px;
       margin: 30px auto;
       border: 2px solid #0055aa;
       background: #e0e8ff;
       color: #000;
       box-shadow: 0 0 10px #000;
+      z-index: 1;
     }
     .titlebar {
       background: linear-gradient(#0b4fa8, #0b2f6a);
@@ -47,6 +67,7 @@
     .left, .right {
       flex: 1;
     }
+
     .warning {
       background: #ffcccc;
       border: 1px solid #cc0000;
@@ -54,9 +75,24 @@
       padding: 8px;
       font-weight: bold;
       text-align: center;
-      margin-bottom: 10px;
+      margin-bottom: 4px;
       text-transform: uppercase;
+      font-size: 12px;
     }
+
+    /* Bloc sous le bandeau : petites lignes aléatoires */
+    .disclaimers {
+      background: #ffecec;
+      border: 1px solid #e0a0a0;
+      color: #660000;
+      padding: 6px 8px;
+      font-size: 10px;
+      margin-bottom: 10px;
+    }
+    .disclaimers div {
+      margin-bottom: 2px;
+    }
+
     .login-box {
       background: #f0f4ff;
       border: 1px solid #a0a0ff;
@@ -106,16 +142,17 @@
       font-style: italic;
       margin-bottom: 3px;
     }
+
     .map-box {
       border: 1px solid #808080;
       background: #ffffff;
       height: 320px;
     }
-    .map-box iframe {
+    #map {
       width: 100%;
       height: 100%;
-      border: 0;
     }
+
     .status-bar {
       background: #d0d0ff;
       padding: 4px 8px;
@@ -134,8 +171,15 @@
     </div>
     <div class="content">
       <div class="left">
+        <!-- Bandeau principal -->
         <div class="warning">
-          CANAL À USAGE RESTREINT – URGENCE OU PRIORITÉS SEULEMENT
+          ALERTE GÉNÉRALE – NIVEAU MAXIMAL ATTEINT<br>
+          Canal restreint : si tu écris ici, c’est que ça chauffe vraiment.
+        </div>
+
+        <!-- Petites lignes aléatoires sous le bandeau -->
+        <div class="disclaimers" id="disclaimersBox">
+          <!-- Rempli en JS -->
         </div>
 
         <div class="login-box" id="loginBox">
@@ -165,10 +209,7 @@
 
       <div class="right">
         <div class="map-box">
-          <!-- Carte OpenStreetMap centrée sur la France (tu pourras ajuster plus tard) -->
-          <iframe 
-            src="https://www.openstreetmap.org/export/embed.html?bbox=2.0,44.0,4.5,46.5&layer=mapnik">
-          </iframe>
+          <div id="map"></div>
         </div>
       </div>
     </div>
@@ -178,7 +219,9 @@
   </div>
 
   <script>
-    // Profils simples en dur (à adapter si tu veux)
+    // -----------------------------
+    // Profils simples en dur
+    // -----------------------------
     const profiles = {
       "alpha": "alpha123",
       "bravo": "bravo123",
@@ -188,7 +231,58 @@
 
     let currentProfile = null;
 
-    // Connexion MQTT (Option A : serveur public Meshtastic)
+    // -----------------------------
+    // Pool de phrases "mentions légales débiles"
+    // -----------------------------
+    const disclaimerPool = [
+      // Série 1
+      "Cette communication peut être surveillée. Ne mentionnez surtout pas l’emplacement du magot planqué. Surtout pas.",
+      "Pour votre sécurité, évitez de parler du magot caché. Pour la nôtre aussi.",
+      "Toute référence au magot enterré entraînera une coupure automatique du canal (ou pas).",
+      // Série 2
+      "Coût d’une communication hors réseau : payable en bitcoin, café ou services rendus.",
+      "Les surtaxes émotionnelles ne sont pas remboursées. Les frais de panique restent à votre charge.",
+      "Toute réponse tardive peut entraîner une majoration en sarcasme.",
+      // Série 3
+      "En utilisant ce canal, vous acceptez que le mesh ne soit pas responsable de vos décisions discutables.",
+      "Si vous lisez ceci, c’est que la situation est grave… ou que vous aimez lire les petites lignes.",
+      "Aucune garantie de bon sens n’est fournie avec ce service. Utilisation à vos risques et périls.",
+      // Série 4 – IA / guerre électronique
+      "Cette communication peut être analysée par une IA. Si tu dis une connerie, elle s’en souviendra plus longtemps que toi.",
+      "Toute tentative de brouillage sera interprétée comme un aveu de culpabilité par l’algorithme. Ou comme un bug. On ne sait pas encore.",
+      "Ce canal est susceptible d’être intercepté par des moyens de guerre électronique. Mais honnêtement, ils ont sûrement mieux à faire.",
+      "Les paquets envoyés sur ce mesh peuvent être copiés, rejoués, disséqués et jugés par une IA légèrement rancunière.",
+      "En poursuivant cette communication, vous acceptez que vos messages servent un jour d’exemple dans une présentation “à ne pas faire en situation de crise”.",
+      "Toute phrase contenant les mots “plan”, “attaque” ou “magot” déclenche automatiquement une hausse de la tension artérielle de l’IA de surveillance.",
+      "Ce système utilise des techniques avancées de guerre électronique. Enfin… surtout du MQTT et un peu de chance.",
+      "Si vous avez l’impression d’être surveillé, rassurez-vous : ce n’est pas qu’une impression.",
+      "Certains messages peuvent être utilisés pour entraîner une IA. Si elle devient plus intelligente que nous, ce sera en partie de votre faute."
+    ];
+
+    function pickRandomDisclaimers(count) {
+      const poolCopy = [...disclaimerPool];
+      const result = [];
+      for (let i = 0; i < count && poolCopy.length > 0; i++) {
+        const idx = Math.floor(Math.random() * poolCopy.length);
+        result.push(poolCopy.splice(idx, 1)[0]);
+      }
+      return result;
+    }
+
+    function renderDisclaimers() {
+      const box = document.getElementById('disclaimersBox');
+      box.innerHTML = "";
+      const selected = pickRandomDisclaimers(3);
+      selected.forEach(text => {
+        const div = document.createElement('div');
+        div.textContent = text;
+        box.appendChild(div);
+      });
+    }
+
+    // -----------------------------
+    // Connexion MQTT
+    // -----------------------------
     const client = mqtt.connect("wss://mqtt.meshtastic.org:443");
 
     client.on('connect', function () {
@@ -210,6 +304,32 @@
       chat.scrollTop = chat.scrollHeight;
     }
 
+    // -----------------------------
+    // Telegram – à configurer
+    // -----------------------------
+    const TELEGRAM_BOT_TOKEN = "TON_BOT_TOKEN_ICI";
+    const TELEGRAM_CHAT_ID   = "TON_CHAT_ID_ICI";
+
+    function sendTelegramNotification(text) {
+      if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID ||
+          TELEGRAM_BOT_TOKEN.includes("TON_BOT") ||
+          TELEGRAM_CHAT_ID.includes("TON_CHAT")) {
+        // Pas configuré, on ignore silencieusement
+        return;
+      }
+      fetch("https://api.telegram.org/bot" + TELEGRAM_BOT_TOKEN + "/sendMessage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: TELEGRAM_CHAT_ID,
+          text: text
+        })
+      }).catch(() => {});
+    }
+
+    // -----------------------------
+    // Login
+    // -----------------------------
     function login() {
       const profile = document.getElementById('profileSelect').value;
       const pwd = document.getElementById('passwordInput').value;
@@ -232,12 +352,20 @@
         addMessage("[Système] Connecté en tant que " + profile, "msg-system");
         document.getElementById('statusBar').textContent =
           "Profil : " + profile + " – MQTT : connecté à mqtt.meshtastic.org";
+
+        // Exemple : notif Telegram à la connexion
+        sendTelegramNotification("Connexion au canal restreint par le profil : " + profile);
+
+        // Plus tard : ici on pourra afficher ton marker + trajet 48h sur la carte
       } else {
         status.style.color = "#900";
         status.textContent = "Profil ou mot de passe incorrect.";
       }
     }
 
+    // -----------------------------
+    // Envoi de message
+    // -----------------------------
     function sendMessage() {
       if (!currentProfile) {
         addMessage("[Système] Vous devez être connecté pour envoyer.", "msg-system");
@@ -254,11 +382,41 @@
       const payload = JSON.stringify({ "text": text });
 
       // TODO : adapte le topic à ton canal réel
-      // Exemple : msh/FR/moncanal/2/json
       client.publish("msh/FR/tonchannel/2/json", payload);
+
+      // Exemple : notif Telegram à chaque message
+      sendTelegramNotification("[" + currentProfile + "] " + text);
 
       input.value = "";
     }
+
+    // -----------------------------
+    // Carte Leaflet (base)
+    // -----------------------------
+    let map;
+
+    function initMap() {
+      map = L.map('map').setView([45.5, 3.1], 7); // centre approximatif Auvergne
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap'
+      }).addTo(map);
+
+      // Plus tard : on ajoutera ici
+      // - ton icône skate / canne à pêche
+      // - l’icône 3008
+      // - le tracé des 48 dernières heures
+      // - visibles seulement après login
+    }
+
+    // -----------------------------
+    // Init au chargement
+    // -----------------------------
+    window.addEventListener('load', () => {
+      renderDisclaimers();
+      initMap();
+    });
   </script>
 </body>
 </html>
