@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html>
 <head>
@@ -14,14 +15,14 @@
       color: #ffffff;
     }
 
-    /* Watermark diagonal "ALERTE GÉNÉRALE" */
+    /* Watermark diagonal en patois auvergnat */
     body::before {
-      content: "ALERTE GÉNÉRALE";
+      content: "Fò pas o dire — secret de bougnat";
       position: fixed;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%) rotate(-30deg);
-      font-size: 72px;
+      font-size: 64px;
       color: rgba(255, 255, 255, 0.06);
       pointer-events: none;
       z-index: 0;
@@ -93,7 +94,7 @@
       font-size: 11px;
     }
 
-    /* Bloc sous le bandeau : petites lignes aléatoires */
+    /* Petites lignes aléatoires sous le bandeau */
     .disclaimers {
       background: #ffecec;
       border: 1px solid #e0a0a0;
@@ -227,28 +228,20 @@
     </div>
     <div class="content">
       <div class="left">
-        <!-- Bandeau principal -->
         <div class="warning">
           ALERTE GÉNÉRALE – NIVEAU MAXIMAL ATTEINT<br>
           Canal restreint : si tu écris ici, c’est que ça chauffe vraiment.
         </div>
 
-        <!-- Message titre global (zetta) -->
         <div id="globalTitleBanner"></div>
 
-        <!-- Petites lignes aléatoires sous le bandeau -->
-        <div class="disclaimers" id="disclaimersBox">
-          <!-- Rempli en JS -->
-        </div>
+        <div class="disclaimers" id="disclaimersBox"></div>
 
         <div class="login-box" id="loginBox">
           <div><b>Connexion profil</b></div>
-
-          <!-- Sélecteur de profil avec mode manuel -->
           <label>Profil :</label>
           <select id="profileSelect">
             <option value="">-- choisir un profil --</option>
-            <option value="__manual__">⟵ saisir un nom manuellement</option>
             <option value="alpha">Alpha</option>
             <option value="bravo">Bravo</option>
             <option value="charlie">Charlie</option>
@@ -256,9 +249,6 @@
             <!-- zetta caché -->
             <option value="zetta" style="display:none;">zetta</option>
           </select>
-
-          <!-- Champ manuel -->
-          <input type="text" id="manualProfileInput" placeholder="Nom du profil…" style="display:none;margin-top:4px;">
 
           <label>Mot de passe :</label>
           <input type="password" id="passwordInput" placeholder="Mot de passe">
@@ -274,12 +264,10 @@
           <button onclick="sendMessage()" id="sendBtn" disabled>Envoyer</button>
         </div>
 
-        <!-- Bouton Wizz -->
         <div class="wizz-box">
           <button id="wizzBtn" onclick="sendWizz()" disabled>Wizz</button>
         </div>
 
-        <!-- Outils super-admin (zetta) -->
         <div id="zettaTools">
           <div><b>Outils maintenance (zetta)</b></div>
           <label>Titre global (bannière) :</label>
@@ -305,8 +293,7 @@
 
   <script>
     // -----------------------------
-    // Profils simples en dur
-    // TODO: changer les mots de passe plus tard
+    // Profils (TODO: changer les mots de passe plus tard)
     // -----------------------------
     const profiles = {
       "alpha": "alpha123",
@@ -315,10 +302,9 @@
       "delta": "delta123"
     };
 
-    // Profil super-admin (zetta)
+    // Super-admin zetta (caché)
     // TODO: changer le mot de passe plus tard
     const ZETTA_PASSWORD = "zetta123";
-
     const ADMIN_PROFILES = ["alpha", "zetta"];
     const SUPER_ADMIN = "zetta";
 
@@ -326,19 +312,7 @@
     let loginTime = 0;
 
     // -----------------------------
-    // Gestion du mode manuel
-    // -----------------------------
-    document.getElementById('profileSelect').addEventListener('change', function () {
-      const manual = document.getElementById('manualProfileInput');
-      if (this.value === "__manual__") {
-        manual.style.display = "block";
-      } else {
-        manual.style.display = "none";
-      }
-    });
-
-    // -----------------------------
-    // Pool de phrases "mentions légales débiles"
+    // Mentions "débiles" aléatoires
     // -----------------------------
     const disclaimerPool = [
       "Cette communication peut être surveillée. Ne mentionnez surtout pas l’emplacement du magot planqué. Surtout pas.",
@@ -383,13 +357,12 @@
     }
 
     // -----------------------------
-    // TOPIC MESH (à changer plus tard)
-    // Topic par défaut "d'usine" : msh/0/json
+    // TOPIC MESH (TODO: changer plus tard)
     // -----------------------------
     const MESH_TOPIC = "msh/0/json";
 
     // -----------------------------
-    // Connexion MQTT
+    // MQTT Meshtastic
     // -----------------------------
     const client = mqtt.connect("wss://mqtt.meshtastic.org:443");
 
@@ -408,7 +381,8 @@
       if (topic !== MESH_TOPIC) return;
       try {
         const data = JSON.parse(message.toString());
-        if (data.position && typeof data.position.latitude === "number") {
+        if (data.position && typeof data.position.latitude === "number" &&
+            typeof data.position.longitude === "number") {
           const lat = data.position.latitude;
           const lon = data.position.longitude;
           updateCurrentPosition(lat, lon, "Position reçue via le réseau Mesh", 1);
@@ -426,7 +400,7 @@
     }
 
     // -----------------------------
-    // Telegram – à configurer
+    // Telegram (TODO: configurer)
     // -----------------------------
     const TELEGRAM_BOT_TOKEN = "TON_BOT_TOKEN_ICI";
     const TELEGRAM_CHAT_ID   = "TON_CHAT_ID_ICI";
@@ -452,4 +426,276 @@
     }
 
     function isSuperAdmin() {
-      return currentProfile
+      return currentProfile === SUPER_ADMIN;
+    }
+
+    // -----------------------------
+    // Login (avec accès direct zetta par mot de passe)
+    // -----------------------------
+    function login() {
+      let profile = document.getElementById('profileSelect').value;
+      const pwd = document.getElementById('passwordInput').value;
+      const status = document.getElementById('loginStatus');
+
+      if (!pwd) {
+        status.textContent = "Entrez un mot de passe.";
+        return;
+      }
+
+      // Accès direct zetta par mot de passe
+      if (pwd === ZETTA_PASSWORD) {
+        profile = "zetta";
+      }
+
+      if (!profile) {
+        status.textContent = "Choisissez un profil (ou utilisez le mot de passe zetta).";
+        return;
+      }
+
+      let ok = false;
+
+      if (profile === "zetta") {
+        if (pwd === ZETTA_PASSWORD) ok = true;
+      } else if (profiles[profile] && profiles[profile] === pwd) {
+        ok = true;
+      }
+
+      if (ok) {
+        currentProfile = profile;
+        loginTime = Date.now();
+        status.style.color = "#060";
+        status.textContent = "Connexion réussie.";
+        document.getElementById('msgInput').disabled = false;
+        document.getElementById('sendBtn').disabled = false;
+        addMessage("[Système] Connecté en tant que " + profile, "msg-system");
+        document.getElementById('statusBar').textContent =
+          "Profil : " + profile + " – MQTT : connecté à mqtt.meshtastic.org";
+
+        // Wizz activé uniquement pour alpha et zetta
+        document.getElementById('wizzBtn').disabled = !isAdmin();
+
+        // Outils zetta visibles uniquement pour super-admin
+        document.getElementById('zettaTools').style.display = isSuperAdmin() ? "block" : "none";
+
+        sendTelegramNotification("Connexion au canal restreint par le profil : " + profile);
+
+        requestBrowserPositionOnce();
+      } else {
+        status.style.color = "#900";
+        status.textContent = "Profil ou mot de passe incorrect.";
+      }
+    }
+
+    // -----------------------------
+    // Envoi de message
+    // -----------------------------
+    function sendMessage() {
+      if (!currentProfile) {
+        addMessage("[Système] Vous devez être connecté pour envoyer.", "msg-system");
+        return;
+      }
+      const input = document.getElementById('msgInput');
+      const text = input.value.trim();
+      if (!text) return;
+
+      addMessage(currentProfile + " : " + text, "msg-me");
+
+      const payload = JSON.stringify({ "text": text });
+      client.publish(MESH_TOPIC, payload);
+
+      sendTelegramNotification("[" + currentProfile + "] " + text);
+
+      input.value = "";
+    }
+
+    // -----------------------------
+    // Wizz (alpha + zetta)
+    // -----------------------------
+    const WIZZ_LIMIT_FIRST_MINUTE = 5;
+    const WIZZ_LIMIT_PER_MINUTE = 3;
+
+    let wizzCount = 0;
+    let wizzWindowStart = 0;
+
+    function canSendWizz() {
+      const now = Date.now();
+      if (!wizzWindowStart) {
+        wizzWindowStart = now;
+        wizzCount = 0;
+      }
+      const elapsedSinceLogin = now - loginTime;
+      const elapsedWindow = now - wizzWindowStart;
+
+      let limit;
+      if (elapsedSinceLogin < 60000) {
+        limit = WIZZ_LIMIT_FIRST_MINUTE;
+      } else {
+        if (elapsedWindow > 60000) {
+          wizzWindowStart = now;
+          wizzCount = 0;
+        }
+        limit = WIZZ_LIMIT_PER_MINUTE;
+      }
+      return wizzCount < limit;
+    }
+
+    function sendWizz() {
+      if (!currentProfile || !isAdmin()) return;
+
+      if (!canSendWizz()) {
+        addMessage("[Système] Wizz limité, attends un peu avant de recommencer.", "msg-system");
+        return;
+      }
+
+      wizzCount++;
+
+      addMessage("[WIZZ] " + currentProfile + " a envoyé un wizz !", "msg-system");
+
+      const win = document.getElementById('mainWindow');
+      win.classList.add('wizz-shake');
+      setTimeout(() => win.classList.remove('wizz-shake'), 450);
+
+      sendTelegramNotification("[WIZZ] " + currentProfile + " a envoyé un wizz sur le canal restreint.");
+
+      const payload = JSON.stringify({ "text": "[WIZZ] " + currentProfile });
+      client.publish(MESH_TOPIC, payload);
+    }
+
+    // -----------------------------
+    // Outils super-admin (zetta)
+    // -----------------------------
+    function applyGlobalTitle() {
+      if (!isSuperAdmin()) return;
+      const txt = document.getElementById('globalTitleInput').value.trim();
+      const banner = document.getElementById('globalTitleBanner');
+      if (txt) {
+        banner.textContent = txt;
+        banner.style.display = "block";
+      } else {
+        banner.textContent = "";
+        banner.style.display = "none";
+      }
+    }
+
+    function sendZettaReply() {
+      if (!isSuperAdmin()) return;
+      const txt = document.getElementById('zettaReplyInput').value.trim();
+      if (!txt) return;
+      addMessage("[ADMIN zetta] " + txt, "msg-system");
+
+      const payload = JSON.stringify({ "text": "[ADMIN zetta] " + txt });
+      client.publish(MESH_TOPIC, payload);
+      sendTelegramNotification("[ADMIN zetta] " + txt);
+
+      document.getElementById('zettaReplyInput').value = "";
+    }
+
+    // -----------------------------
+    // Carte Leaflet + historique 48h
+    // -----------------------------
+    let map;
+    let currentMarker = null;
+    let currentSourcePriority = Infinity; // 1 = mesh, 2 = GPS, 3 = box
+    let historyPositions = [];
+    let historyPolyline = null;
+
+    function initMap() {
+      map = L.map('map').setView([45.5, 3.1], 7);
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap'
+      }).addTo(map);
+    }
+
+    function pruneHistory() {
+      const now = Date.now();
+      const cutoff = now - 48 * 60 * 60 * 1000;
+      historyPositions = historyPositions.filter(p => p.time >= cutoff);
+    }
+
+    function redrawHistoryPolyline() {
+      if (!map) return;
+      if (historyPolyline) {
+        map.removeLayer(historyPolyline);
+        historyPolyline = null;
+      }
+      if (!isAdmin()) return;
+
+      if (historyPositions.length > 1) {
+        const latlngs = historyPositions.map(p => [p.lat, p.lon]);
+        historyPolyline = L.polyline(latlngs, { color: 'red', weight: 3, opacity: 0.7 });
+        historyPolyline.addTo(map);
+      }
+    }
+
+    function addHistoryPoint(lat, lon) {
+      const now = Date.now();
+      historyPositions.push({ lat, lon, time: now });
+      pruneHistory();
+      redrawHistoryPolyline();
+    }
+
+    function updateCurrentPosition(lat, lon, sourceLabel, priority) {
+      if (!map) return;
+      if (priority >= currentSourcePriority) {
+        return;
+      }
+      currentSourcePriority = priority;
+
+      if (currentMarker) {
+        map.removeLayer(currentMarker);
+        currentMarker = null;
+      }
+
+      currentMarker = L.marker([lat, lon]).addTo(map).bindPopup(sourceLabel);
+      currentMarker.openPopup();
+      map.setView([lat, lon], 12);
+
+      if (isAdmin()) {
+        addHistoryPoint(lat, lon);
+      }
+    }
+
+    // -----------------------------
+    // Position navigateur (GPS / réseau)
+    // -----------------------------
+    let browserPositionRequested = false;
+
+    function requestBrowserPositionOnce() {
+      if (browserPositionRequested) return;
+      browserPositionRequested = true;
+
+      if (!navigator.geolocation) return;
+
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          const lat = pos.coords.latitude;
+          const lon = pos.coords.longitude;
+          const acc = pos.coords.accuracy || 0;
+
+          if (acc > 1000) {
+            updateCurrentPosition(lat, lon, "Pas d’appareil connecté. Position estimée via la box 4G", 3);
+          } else {
+            updateCurrentPosition(lat, lon, "Position GPS du téléphone", 2);
+          }
+        },
+        err => {},
+        {
+          enableHighAccuracy: true,
+          timeout: 5000
+        }
+      );
+    }
+
+    // -----------------------------
+    // Init
+    // -----------------------------
+    window.addEventListener('load', () => {
+      renderDisclaimers();
+      initMap();
+    });
+  </script>
+</body>
+</html>
+```
