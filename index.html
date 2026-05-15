@@ -1,4 +1,3 @@
-```html
 <!DOCTYPE html>
 <html>
 <head>
@@ -81,7 +80,7 @@
       font-size: 12px;
     }
 
-    /* Bandeau titre global (admin) */
+    /* Bandeau titre global (zetta) */
     #globalTitleBanner {
       display: none;
       background: #ffe0a0;
@@ -244,16 +243,23 @@
 
         <div class="login-box" id="loginBox">
           <div><b>Connexion profil</b></div>
+
+          <!-- Sélecteur de profil avec mode manuel -->
           <label>Profil :</label>
           <select id="profileSelect">
             <option value="">-- choisir un profil --</option>
+            <option value="__manual__">⟵ saisir un nom manuellement</option>
             <option value="alpha">Alpha</option>
             <option value="bravo">Bravo</option>
             <option value="charlie">Charlie</option>
             <option value="delta">Delta</option>
-            <!-- Profil zetta caché dans la liste (maintenance) -->
+            <!-- zetta caché -->
             <option value="zetta" style="display:none;">zetta</option>
           </select>
+
+          <!-- Champ manuel -->
+          <input type="text" id="manualProfileInput" placeholder="Nom du profil…" style="display:none;margin-top:4px;">
+
           <label>Mot de passe :</label>
           <input type="password" id="passwordInput" placeholder="Mot de passe">
           <button onclick="login()">Se connecter</button>
@@ -267,6 +273,8 @@
           <input id="msgInput" type="text" placeholder="Tapez votre message..." disabled>
           <button onclick="sendMessage()" id="sendBtn" disabled>Envoyer</button>
         </div>
+
+        <!-- Bouton Wizz -->
         <div class="wizz-box">
           <button id="wizzBtn" onclick="sendWizz()" disabled>Wizz</button>
         </div>
@@ -318,22 +326,30 @@
     let loginTime = 0;
 
     // -----------------------------
+    // Gestion du mode manuel
+    // -----------------------------
+    document.getElementById('profileSelect').addEventListener('change', function () {
+      const manual = document.getElementById('manualProfileInput');
+      if (this.value === "__manual__") {
+        manual.style.display = "block";
+      } else {
+        manual.style.display = "none";
+      }
+    });
+
+    // -----------------------------
     // Pool de phrases "mentions légales débiles"
     // -----------------------------
     const disclaimerPool = [
-      // Série 1
       "Cette communication peut être surveillée. Ne mentionnez surtout pas l’emplacement du magot planqué. Surtout pas.",
       "Pour votre sécurité, évitez de parler du magot caché. Pour la nôtre aussi.",
       "Toute référence au magot enterré entraînera une coupure automatique du canal (ou pas).",
-      // Série 2
       "Coût d’une communication hors réseau : payable en bitcoin, café ou services rendus.",
       "Les surtaxes émotionnelles ne sont pas remboursées. Les frais de panique restent à votre charge.",
       "Toute réponse tardive peut entraîner une majoration en sarcasme.",
-      // Série 3
       "En utilisant ce canal, vous acceptez que le mesh ne soit pas responsable de vos décisions discutables.",
       "Si vous lisez ceci, c’est que la situation est grave… ou que vous aimez lire les petites lignes.",
       "Aucune garantie de bon sens n’est fournie avec ce service. Utilisation à vos risques et périls.",
-      // Série 4 – IA / guerre électronique
       "Cette communication peut être analysée par une IA. Si tu dis une connerie, elle s’en souviendra plus longtemps que toi.",
       "Toute tentative de brouillage sera interprétée comme un aveu de culpabilité par l’algorithme. Ou comme un bug. On ne sait pas encore.",
       "Ce canal est susceptible d’être intercepté par des moyens de guerre électronique. Mais honnêtement, ils ont sûrement mieux à faire.",
@@ -380,7 +396,6 @@
     client.on('connect', function () {
       document.getElementById('statusBar').textContent =
         "Profil : non connecté – MQTT : connecté à mqtt.meshtastic.org";
-      // Abonnement au topic mesh
       client.subscribe(MESH_TOPIC);
     });
 
@@ -393,15 +408,12 @@
       if (topic !== MESH_TOPIC) return;
       try {
         const data = JSON.parse(message.toString());
-        // Position Meshtastic
-        if (data.position && typeof data.position.latitude === "number" && typeof data.position.longitude === "number") {
+        if (data.position && typeof data.position.latitude === "number") {
           const lat = data.position.latitude;
           const lon = data.position.longitude;
           updateCurrentPosition(lat, lon, "Position reçue via le réseau Mesh", 1);
         }
-      } catch (e) {
-        // ignore
-      }
+      } catch (e) {}
     });
 
     function addMessage(text, cssClass) {
@@ -415,7 +427,6 @@
 
     // -----------------------------
     // Telegram – à configurer
-    // TODO: renseigner BOT_TOKEN et CHAT_ID plus tard
     // -----------------------------
     const TELEGRAM_BOT_TOKEN = "TON_BOT_TOKEN_ICI";
     const TELEGRAM_CHAT_ID   = "TON_CHAT_ID_ICI";
@@ -424,16 +435,12 @@
       if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID ||
           TELEGRAM_BOT_TOKEN.includes("TON_BOT") ||
           TELEGRAM_CHAT_ID.includes("TON_CHAT")) {
-        // Pas configuré, on ignore silencieusement
         return;
       }
       fetch("https://api.telegram.org/bot" + TELEGRAM_BOT_TOKEN + "/sendMessage", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: TELEGRAM_CHAT_ID,
-          text: text
-        })
+        body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text })
       }).catch(() => {});
     }
 
@@ -445,292 +452,4 @@
     }
 
     function isSuperAdmin() {
-      return currentProfile === SUPER_ADMIN;
-    }
-
-    // -----------------------------
-    // Login
-    // -----------------------------
-    function login() {
-      const profile = document.getElementById('profileSelect').value;
-      const pwd = document.getElementById('passwordInput').value;
-      const status = document.getElementById('loginStatus');
-
-      if (!profile) {
-        status.textContent = "Choisissez un profil.";
-        return;
-      }
-      if (!pwd) {
-        status.textContent = "Entrez un mot de passe.";
-        return;
-      }
-
-      let ok = false;
-
-      if (profile === "zetta") {
-        // Super-admin
-        if (pwd === ZETTA_PASSWORD) ok = true;
-      } else if (profiles[profile] && profiles[profile] === pwd) {
-        ok = true;
-      }
-
-      if (ok) {
-        currentProfile = profile;
-        loginTime = Date.now();
-        status.style.color = "#060";
-        status.textContent = "Connexion réussie.";
-        document.getElementById('msgInput').disabled = false;
-        document.getElementById('sendBtn').disabled = false;
-        addMessage("[Système] Connecté en tant que " + profile, "msg-system");
-        document.getElementById('statusBar').textContent =
-          "Profil : " + profile + " – MQTT : connecté à mqtt.meshtastic.org";
-
-        // Wizz activé uniquement pour alpha et zetta
-        document.getElementById('wizzBtn').disabled = !isAdmin();
-
-        // Outils zetta visibles uniquement pour super-admin
-        document.getElementById('zettaTools').style.display = isSuperAdmin() ? "block" : "none";
-
-        // Exemple : notif Telegram à la connexion
-        sendTelegramNotification("Connexion au canal restreint par le profil : " + profile);
-
-        // Demande de position navigateur (GPS / réseau)
-        requestBrowserPositionOnce();
-      } else {
-        status.style.color = "#900";
-        status.textContent = "Profil ou mot de passe incorrect.";
-      }
-    }
-
-    // -----------------------------
-    // Envoi de message
-    // -----------------------------
-    function sendMessage() {
-      if (!currentProfile) {
-        addMessage("[Système] Vous devez être connecté pour envoyer.", "msg-system");
-        return;
-      }
-      const input = document.getElementById('msgInput');
-      const text = input.value.trim();
-      if (!text) return;
-
-      // Affichage local
-      addMessage(currentProfile + " : " + text, "msg-me");
-
-      // Payload pour Meshtastic (texte simple)
-      const payload = JSON.stringify({ "text": text });
-
-      // Publication sur le topic mesh actuel
-      client.publish(MESH_TOPIC, payload);
-
-      // Exemple : notif Telegram à chaque message
-      sendTelegramNotification("[" + currentProfile + "] " + text);
-
-      input.value = "";
-    }
-
-    // -----------------------------
-    // Wizz (alpha + zetta)
-    // -----------------------------
-    // TODO: ajuster les limites plus tard si besoin
-    const WIZZ_LIMIT_FIRST_MINUTE = 5;
-    const WIZZ_LIMIT_PER_MINUTE = 3;
-
-    let wizzCount = 0;
-    let wizzWindowStart = 0;
-
-    function canSendWizz() {
-      const now = Date.now();
-      if (!wizzWindowStart) {
-        wizzWindowStart = now;
-        wizzCount = 0;
-      }
-      const elapsedSinceLogin = now - loginTime;
-      const elapsedWindow = now - wizzWindowStart;
-
-      let limit;
-      if (elapsedSinceLogin < 60000) {
-        // Première minute après connexion
-        limit = WIZZ_LIMIT_FIRST_MINUTE;
-      } else {
-        // Ensuite : fenêtre glissante de 60s
-        if (elapsedWindow > 60000) {
-          wizzWindowStart = now;
-          wizzCount = 0;
-        }
-        limit = WIZZ_LIMIT_PER_MINUTE;
-      }
-      return wizzCount < limit;
-    }
-
-    function sendWizz() {
-      if (!currentProfile || !isAdmin()) return;
-
-      if (!canSendWizz()) {
-        addMessage("[Système] Wizz limité, attends un peu avant de recommencer.", "msg-system");
-        return;
-      }
-
-      wizzCount++;
-
-      // Message local
-      addMessage("[WIZZ] " + currentProfile + " a envoyé un wizz !", "msg-system");
-
-      // Effet visuel
-      const win = document.getElementById('mainWindow');
-      win.classList.add('wizz-shake');
-      setTimeout(() => win.classList.remove('wizz-shake'), 450);
-
-      // Ping Telegram
-      sendTelegramNotification("[WIZZ] " + currentProfile + " a envoyé un wizz sur le canal restreint.");
-
-      // Ping sur le mesh
-      const payload = JSON.stringify({ "text": "[WIZZ] " + currentProfile });
-      client.publish(MESH_TOPIC, payload);
-    }
-
-    // -----------------------------
-    // Outils super-admin (zetta)
-    // -----------------------------
-    function applyGlobalTitle() {
-      if (!isSuperAdmin()) return;
-      const txt = document.getElementById('globalTitleInput').value.trim();
-      const banner = document.getElementById('globalTitleBanner');
-      if (txt) {
-        banner.textContent = txt;
-        banner.style.display = "block";
-      } else {
-        banner.textContent = "";
-        banner.style.display = "none";
-      }
-    }
-
-    function sendZettaReply() {
-      if (!isSuperAdmin()) return;
-      const txt = document.getElementById('zettaReplyInput').value.trim();
-      if (!txt) return;
-      addMessage("[ADMIN zetta] " + txt, "msg-system");
-
-      // Relais éventuel vers mesh et Telegram
-      const payload = JSON.stringify({ "text": "[ADMIN zetta] " + txt });
-      client.publish(MESH_TOPIC, payload);
-      sendTelegramNotification("[ADMIN zetta] " + txt);
-
-      document.getElementById('zettaReplyInput').value = "";
-    }
-
-    // -----------------------------
-    // Carte Leaflet (base) + tracking 48h
-    // -----------------------------
-    let map;
-    let currentMarker = null;
-    let currentSourcePriority = Infinity; // 1 = mesh, 2 = GPS, 3 = box
-    let historyPositions = [];
-    let historyPolyline = null;
-
-    function initMap() {
-      map = L.map('map').setView([45.5, 3.1], 7); // centre approximatif Auvergne
-
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '&copy; OpenStreetMap'
-      }).addTo(map);
-    }
-
-    function pruneHistory() {
-      const now = Date.now();
-      const cutoff = now - 48 * 60 * 60 * 1000; // 48h
-      historyPositions = historyPositions.filter(p => p.time >= cutoff);
-    }
-
-    function redrawHistoryPolyline() {
-      if (!map) return;
-      if (historyPolyline) {
-        map.removeLayer(historyPolyline);
-        historyPolyline = null;
-      }
-      if (!isAdmin()) return; // historique visible uniquement pour alpha + zetta
-
-      if (historyPositions.length > 1) {
-        const latlngs = historyPositions.map(p => [p.lat, p.lon]);
-        historyPolyline = L.polyline(latlngs, { color: 'red', weight: 3, opacity: 0.7 });
-        historyPolyline.addTo(map);
-      }
-    }
-
-    function addHistoryPoint(lat, lon) {
-      const now = Date.now();
-      historyPositions.push({ lat, lon, time: now });
-      pruneHistory();
-      redrawHistoryPolyline();
-    }
-
-    function updateCurrentPosition(lat, lon, sourceLabel, priority) {
-      if (!map) return;
-      if (priority >= currentSourcePriority) {
-        // On a déjà une source plus prioritaire
-        return;
-      }
-      currentSourcePriority = priority;
-
-      if (currentMarker) {
-        map.removeLayer(currentMarker);
-        currentMarker = null;
-      }
-
-      currentMarker = L.marker([lat, lon]).addTo(map).bindPopup(sourceLabel);
-      currentMarker.openPopup();
-      map.setView([lat, lon], 12);
-
-      if (isAdmin()) {
-        addHistoryPoint(lat, lon);
-      }
-    }
-
-    // -----------------------------
-    // Position navigateur (GPS / réseau)
-    // -----------------------------
-    let browserPositionRequested = false;
-
-    function requestBrowserPositionOnce() {
-      if (browserPositionRequested) return;
-      browserPositionRequested = true;
-
-      if (!navigator.geolocation) {
-        return;
-      }
-
-      navigator.geolocation.getCurrentPosition(
-        pos => {
-          const lat = pos.coords.latitude;
-          const lon = pos.coords.longitude;
-          const acc = pos.coords.accuracy || 0;
-
-          // Heuristique simple : si précision très mauvaise, on considère que c’est la box / réseau
-          if (acc > 1000) {
-            updateCurrentPosition(lat, lon, "Pas d’appareil connecté. Position estimée via la box 4G", 3);
-          } else {
-            updateCurrentPosition(lat, lon, "Position GPS du téléphone", 2);
-          }
-        },
-        err => {
-          // Pas de GPS / pas de permission : on ne fait rien
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 5000
-        }
-      );
-    }
-
-    // -----------------------------
-    // Init au chargement
-    // -----------------------------
-    window.addEventListener('load', () => {
-      renderDisclaimers();
-      initMap();
-    });
-  </script>
-</body>
-</html>
-```
+      return currentProfile
