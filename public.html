@@ -4,12 +4,14 @@
   <meta charset="UTF-8">
   <title>Canal public – Urgence</title>
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+
   <style>
     body {
       background: #0b173b url('https://i.imgur.com/1pQvQqS.png') repeat;
       font-family: Tahoma, Verdana, sans-serif;
       color: #ffffff;
     }
+
     .window {
       width: 600px;
       margin: 40px auto;
@@ -18,6 +20,7 @@
       color: #000;
       box-shadow: 0 0 10px #000;
     }
+
     .titlebar {
       background: linear-gradient(#0b4fa8, #0b2f6a);
       color: #fff;
@@ -28,6 +31,7 @@
       justify-content: space-between;
       align-items: center;
     }
+
     .titlebar-buttons span {
       display: inline-block;
       width: 16px;
@@ -39,9 +43,11 @@
       font-size: 11px;
       cursor: default;
     }
+
     .content {
       padding: 10px;
     }
+
     .warning {
       background: #ffcccc;
       border: 1px solid #cc0000;
@@ -51,7 +57,9 @@
       text-align: center;
       margin-bottom: 10px;
       text-transform: uppercase;
+      font-size: 12px;
     }
+
     .chat-window {
       border: 1px solid #808080;
       background: #ffffff;
@@ -60,29 +68,35 @@
       padding: 5px;
       font-size: 12px;
     }
+
     .chat-input {
       margin-top: 6px;
       display: flex;
       gap: 4px;
     }
+
     .chat-input input {
       flex: 1;
       font-size: 12px;
       padding: 3px;
     }
+
     .chat-input button {
       width: 80px;
       font-size: 12px;
     }
+
     .msg-me {
       color: #003399;
       margin-bottom: 3px;
     }
+
     .msg-system {
       color: #666666;
       font-style: italic;
       margin-bottom: 3px;
     }
+
     .status-bar {
       background: #d0d0ff;
       padding: 4px 8px;
@@ -91,6 +105,7 @@
     }
   </style>
 </head>
+
 <body>
   <div class="window">
     <div class="titlebar">
@@ -99,33 +114,39 @@
         <span>_</span><span>[]</span><span>X</span>
       </div>
     </div>
+
     <div class="content">
       <div class="warning">
-        CANAL À USAGE RESTREINT – URGENCE OU PRIORITÉS SEULEMENT
+        CANAL PUBLIC – URGENCE OU PRIORITÉS SEULEMENT
       </div>
 
       <div class="chat-window" id="chatWindow">
         <div class="msg-system">[Système] Ce canal ne montre pas la localisation.</div>
       </div>
+
       <div class="chat-input">
         <input id="msgInput" type="text" placeholder="Tapez votre message...">
         <button onclick="sendMessage()">Envoyer</button>
       </div>
     </div>
+
     <div class="status-bar" id="statusBar">
       MQTT : connexion en cours…
     </div>
   </div>
 
   <script>
+    // -----------------------------
+    // MQTT
+    // -----------------------------
     const client = mqtt.connect("wss://mqtt.meshtastic.org:443");
 
-    client.on('connect', function () {
+    client.on('connect', () => {
       document.getElementById('statusBar').textContent =
         "MQTT : connecté à mqtt.meshtastic.org";
     });
 
-    client.on('error', function () {
+    client.on('error', () => {
       document.getElementById('statusBar').textContent =
         "MQTT : erreur de connexion";
     });
@@ -139,6 +160,28 @@
       chat.scrollTop = chat.scrollHeight;
     }
 
+    // -----------------------------
+    // Telegram
+    // -----------------------------
+    const BOT_TOKEN = "TON_BOT_TOKEN";
+    const CHAT_ID   = "TON_CHAT_ID";
+
+    function sendTelegram(text) {
+      if (BOT_TOKEN.includes("TON_") || CHAT_ID.includes("TON_")) return;
+
+      fetch("https://api.telegram.org/bot" + BOT_TOKEN + "/sendMessage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: CHAT_ID,
+          text: text
+        })
+      }).catch(() => {});
+    }
+
+    // -----------------------------
+    // Envoi message public
+    // -----------------------------
     function sendMessage() {
       const input = document.getElementById('msgInput');
       const text = input.value.trim();
@@ -148,8 +191,11 @@
 
       const payload = JSON.stringify({ "text": text });
 
-      // TODO : adapte le topic à ton canal réel
+      // Topic public
       client.publish("msh/FR/tonchannel/2/json", payload);
+
+      // Notification Telegram
+      sendTelegram("[PUBLIC] " + text);
 
       input.value = "";
     }
